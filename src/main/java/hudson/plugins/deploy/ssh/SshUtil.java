@@ -111,12 +111,16 @@ public class SshUtil {
         } catch (JSchException e) {
             e.printStackTrace();
         } finally {
-            try {
-                reader.close();
-            } catch (IOException e) {
-                e.printStackTrace();
+            if(reader != null) {
+                try {
+                    reader.close();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
             }
-            channel.disconnect();
+            if(channel != null) {
+                channel.disconnect();
+            }
             if(session != null) {
                 session.disconnect();
             }

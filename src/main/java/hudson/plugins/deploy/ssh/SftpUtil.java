@@ -88,7 +88,9 @@ public class SftpUtil {
             e.getMessage();
             throw e;
         } finally {
-            os.close();
+            if(os != null) {
+                os.close();
+            }
         }
         return file;
     }
