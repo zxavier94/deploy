@@ -2,18 +2,27 @@ package hudson.plugins.deploy;
 
 import com.cloudbees.plugins.credentials.common.StandardUsernamePasswordCredentials;
 import hudson.*;
+import hudson.model.AbstractBuild;
 import hudson.model.AbstractProject;
 import hudson.model.Result;
 import hudson.model.Run;
 import hudson.model.TaskListener;
 import hudson.model.listeners.ItemListener;
+import hudson.plugins.deploy.ssh.ContainerLoc;
+import hudson.plugins.deploy.ssh.SshCredentials;
+import hudson.plugins.deploy.tomcat.TomcatAdapter;
+import hudson.plugins.deploy.tomcat.TomcatUtil;
 import hudson.tasks.BuildStepDescriptor;
 import hudson.tasks.BuildStepMonitor;
 import hudson.tasks.Notifier;
 import hudson.tasks.Publisher;
+import hudson.util.VariableResolver;
+import java.io.File;
 import jenkins.model.Jenkins;
 import jenkins.tasks.SimpleBuildStep;
 import jenkins.util.io.FileBoolean;
+import net.sf.json.JSONObject;
+import org.dom4j.DocumentException;
 import org.jenkinsci.Symbol;
 import org.kohsuke.accmod.Restricted;
 import org.kohsuke.accmod.restrictions.NoExternalUse;
@@ -37,11 +46,16 @@ import java.util.logging.Logger;
  */
 public class DeployPublisher extends Notifier implements SimpleBuildStep, Serializable {
 
+    private static final String containerLocation = "containerLoc";
+
     private List<ContainerAdapter> adapters;
     private String contextPath = "";
 
-    private String war;
-    private boolean onFailure = true;
+    private String         war;
+    private boolean        onFailure = true;
+    private JSONObject     onShutDown;
+    private SshCredentials sshCredentials;
+    private String         sshCredentialsId;
 
     /**
      * @deprecated
@@ -49,10 +63,18 @@ public class DeployPublisher extends Notifier implements SimpleBuildStep, Serial
      */
     public final ContainerAdapter adapter = null;
 
-    @DataBoundConstructor
     public DeployPublisher(List<ContainerAdapter> adapters, String war) {
         this.adapters = adapters;
         this.war = war;
+    }
+
+    @DataBoundConstructor
+    public DeployPublisher(List<ContainerAdapter> adapters, String war,JSONObject onShutDown,String sshCredentialsId) {
+        this.adapters = adapters;
+        this.war = war;
+        this.onShutDown = onShutDown;
+        this.sshCredentials = initSshCredentials();
+        this.sshCredentialsId = sshCredentialsId;
     }
 
     @Deprecated
@@ -74,8 +96,60 @@ public class DeployPublisher extends Notifier implements SimpleBuildStep, Serial
         this.onFailure = onFailure;
     }
 
+    public JSONObject getOnShutDown() {
+        return onShutDown;
+    }
+
+    @DataBoundSetter
+    public void setOnShutDown(JSONObject onShutDown) {
+        this.onShutDown = onShutDown;
+    }
+
+    public boolean isOnShutDown() {
+        if(onShutDown != null && onShutDown.get(containerLocation) != null) {
+            return true;
+        }
+        return false;
+    }
+
+    public String getAbsolutePath() {
+        if(onShutDown != null && onShutDown.get(containerLocation) != null) {
+            JSONObject o = (JSONObject) onShutDown.get(containerLocation);
+            if(o != null && o.containsKey("absolutePath")) {
+                return o.getString("absolutePath") == null ? "" : o.getString("absolutePath");
+            }
+        }
+        return "";
+    }
+
+    public String getContainerLocation() {
+        if(onShutDown != null && onShutDown.get(containerLocation) != null) {
+            JSONObject o = (JSONObject) onShutDown.get(containerLocation);
+            if(o != null && o.containsKey("value")) {
+                String value = o.getString("value");
+                return value == null ? ContainerLoc.loc.toString() : value;
+            }
+        }
+        return ContainerLoc.loc.toString();
+    }
     public String getContextPath () {
         return contextPath;
+    }
+
+    public SshCredentials getSshCredentials() {
+        return sshCredentials;
+    }
+
+    public SshCredentials initSshCredentials() {
+        String location = getContainerLocation();
+        if(ContainerLoc.remote.toString().equals(location)) {
+            JSONObject jsonObject = this.onShutDown.getJSONObject(containerLocation);
+            String sshHostname = jsonObject.getString("sshHostname");
+            String username = jsonObject.getString("username");
+            String encryptedPassphrase = jsonObject.getString("encryptedPassphrase");
+            return new SshCredentials(sshHostname,username,encryptedPassphrase);
+        }
+        return null;
     }
 
     @DataBoundSetter
@@ -105,9 +179,69 @@ public class DeployPublisher extends Notifier implements SimpleBuildStep, Serial
                 throw new InterruptedException("[DeployPublisher][WARN] No wars found. Deploy aborted. %n");
             }
             listener.getLogger().printf("[DeployPublisher][INFO] Attempting to deploy %d war file(s)%n", wars.length);
-
             for (FilePath warFile : wars) {
                 for (ContainerAdapter adapter : adapters) {
+                    if(isOnShutDown()) {
+                        listener.getLogger().println("start container first...");
+                        if(adapter instanceof TomcatAdapter) {
+                            listener.getLogger().println("container is tomcat");
+                            if(getContainerLocation().equals(ContainerLoc.loc.toString())) {
+                                // 启动本地tomcat
+                                String tempPath = getAbsolutePath();
+                                if(tempPath != null && (tempPath.endsWith("/") || tempPath.endsWith("\\"))) {
+                                    tempPath = tempPath.substring(0,tempPath.length() - 1);
+                                }
+                                String systemType = System.getProperty("os.name");
+                                listener.getLogger().println("system os:" + systemType);
+                                String execCmdSuffix = "";
+                                if(systemType.toLowerCase().startsWith("win")) {
+                                    execCmdSuffix = ".bat";
+                                } else {
+                                    execCmdSuffix = ".sh";
+                                }
+                                File startup = new File(tempPath + File.separator + "bin" + File.separator + "startup" + execCmdSuffix);
+                                File shutdown = new File(tempPath + File.separator + "bin" + File.separator + "shutdown" + execCmdSuffix);
+                                if(startup.exists() && shutdown.exists()) {
+                                    listener.getLogger().println("startup path " + startup);
+//                                    listener.getLogger().println("shutdown path " + shutdown);
+//                                    listener.getLogger().println("prepare shutdown container...");
+//                                    ExecCmd.cmd(listener.getLogger(),shutdown.getAbsolutePath());
+                                    boolean flag = false;
+                                    String port = "";
+                                    try {
+                                        port = TomcatUtil.getTomcatPort(tempPath);
+                                        flag = true;
+                                    } catch (DocumentException e) {
+                                        e.printStackTrace();
+                                        listener.error("get tomcat port failed," + e.getMessage());
+                                        listener.error("will not start container first");
+                                    }
+                                    if(flag && !TomcatUtil.testURL("http://localhost:" + port)) {
+                                        listener.getLogger().println("prepare startup container...");
+                                        ExecCmd.cmd(listener.getLogger(),startup.getAbsolutePath());
+                                    }
+                                } else {
+                                    listener.error("startup path " + startup + " exists:" + startup.exists());
+//                                    listener.error("shutdown path " + shutdown + " exists:" + shutdown.exists());
+                                    listener.error("will not start container first");
+                                }
+
+                            } else if(getContainerLocation().equals(ContainerLoc.remote.toString())) {
+                                // 启动远程tomcat 需要ssh
+                                try {
+                                    this.sshCredentials.startupRemoteContainer(listener,getAbsolutePath(),"Tomcat");
+                                } catch (Exception e) {
+                                    e.printStackTrace();
+                                    if("timeout".equals(e.getMessage())) {
+                                        listener.error("timeout");
+                                        run.setResult(Result.FAILURE);
+                                        return;
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     adapter.redeployFile(warFile, contextPath, run, launcher, listener);
                 }
             }

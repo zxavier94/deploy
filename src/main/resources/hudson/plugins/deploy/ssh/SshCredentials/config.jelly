@@ -1,0 +1,18 @@
+<?jelly escape-by-default='true'?>
+
+<j:jelly xmlns:j="jelly:core" xmlns:f="/lib/form" xmlns:poj="/pojelly">
+
+    <poj:defaultMessages/>
+    <f:entry title="${%Hostname}" field="sshHostname">
+      <f:textbox />
+    </f:entry>
+    <f:entry title="${%username}" field="username">
+        <f:textbox />
+    </f:entry>
+    <f:entry title="${%passphrase}" field="encryptedPassphrase">
+        <f:password/>
+    </f:entry>
+    <f:validateButton title="${%Test Connection}" progress="${%Testing...}" method="testConnection"
+                            with="sshHostname,username,encryptedPassphrase"/>
+
+</j:jelly>

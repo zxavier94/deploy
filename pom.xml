@@ -10,7 +10,7 @@
     <artifactId>deploy</artifactId>
     <version>1.14-SNAPSHOT</version>
     <packaging>hpi</packaging>
-    <name>Deploy to container Plugin</name>
+    <name>Deploy to container Plugin2</name>
     <url>http://wiki.jenkins-ci.org/display/JENKINS/Deploy+Plugin</url>
 
     <scm>
@@ -36,6 +36,10 @@
         <developer>
             <id>frekele</id>
             <name>Leandro Kersting de Freitas</name>
+        </developer>
+        <developer>
+            <id>margo</id>
+            <name>zhoupeng</name>
         </developer>
     </developers>
 
@@ -164,9 +168,51 @@
             <scope>test</scope>
         </dependency>
 
+        <dependency>
+            <groupId>org.jenkins-ci.plugins</groupId>
+            <artifactId>publish-over</artifactId>
+            <version>0.21</version>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/org.apache.httpcomponents/httpclient -->
+        <dependency>
+            <groupId>org.apache.httpcomponents</groupId>
+            <artifactId>httpclient</artifactId>
+            <version>4.5.8</version>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/dom4j/dom4j -->
+        <dependency>
+            <groupId>dom4j</groupId>
+            <artifactId>dom4j</artifactId>
+            <version>1.6.1</version>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/jaxen/jaxen -->
+        <dependency>
+            <groupId>jaxen</groupId>
+            <artifactId>jaxen</artifactId>
+            <version>1.2.0</version>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/commons-logging/commons-logging -->
+        <dependency>
+            <groupId>commons-logging</groupId>
+            <artifactId>commons-logging</artifactId>
+            <version>1.2</version>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/com.jcraft/jsch -->
+        <dependency>
+            <groupId>com.jcraft</groupId>
+            <artifactId>jsch</artifactId>
+            <version>0.1.55</version>
+        </dependency>
+
     </dependencies>
 
     <build>
+        <finalName>deploy</finalName>
         <plugins>
             <plugin>
                 <groupId>org.jenkins-ci.tools</groupId>
@@ -203,4 +249,3 @@
     </pluginRepositories>
 
 </project>
-
