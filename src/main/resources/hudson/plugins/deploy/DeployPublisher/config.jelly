@@ -56,7 +56,7 @@
       </f:entry>
     </f:radioBlock>
     <f:radioBlock name="containerLoc" title="remote container" value="remote" checked="${instance.getContainerLocation() == 'remote' ? true : false}">
-      <f:entry title="local absolute container path" field="absolutePath">
+      <f:entry title="remote absolute container path" field="absolutePath">
         <f:textbox value="${instance.getAbsolutePath()}" />
       </f:entry>
       <f:optionalProperty title="${m.credentials()}" field="sshCredentials"/>

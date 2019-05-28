@@ -48,6 +48,7 @@
         <cargo.version>1.6.5</cargo.version>
         <jenkins.version>1.642.3</jenkins.version>
         <workflow-cps-plugin.version>2.15</workflow-cps-plugin.version>
+        <additionalparam>-Xdoclint:none</additionalparam>
     </properties>
 
     <dependencies>
